@@ -40,6 +40,7 @@ def get_L2_geomesh(filename,lintile,coltile):
 
 	for lin in range(0,lintile+1,100):
 		lat=lat0-lin*d
+		y=6371007.181*np.radians(lat)
 		r=np.cos(np.radians(lat))
 		for col in range(0,coltile+1,100):
 			if(lin==lintile):
@@ -47,39 +48,12 @@ def get_L2_geomesh(filename,lintile,coltile):
 			if(col==coltile):
 				col=col-1
 			lon=(lon0+col*d)/r
-			gcp=gdal.GCP(round(lon,6),round(lat,6),0,col+0.5,lin+0.5)
+			x=6371007.181*r*np.radians(lon)
+			gcp=gdal.GCP(x,y,0,col+0.5,lin+0.5)
 			gcp_list.append(gcp)
 
 	return gcp_list
  
-def get_L1_geomesh(lat_array,lon_array):
-	#GCPのリストを作る
-	gcp_list=[]
-	#東経180度西経-180度の線を越えていないかチェック
-	top_left_lon=lon_array[0][0]
-	top_right_lon=lon_array[0][-1]
-	bottom_left_lon=lon_array[-1][0]
-	bottom_right_lon=lon_array[-1][-1]
-	
-	#東経180度西経-180度の線をまたぐ場合
-	if((top_left_lon>top_right_lon) or\
-		(top_left_lon>bottom_right_lon) or\
-		(bottom_left_lon>top_right_lon) or\
-		(bottom_left_lon>bottom_right_lon)\
-		):
-		lon_array=np.where(lon_array<0,lon_array+360,lon_array)
-		for column in range(0,lat_array.shape[0],20):
-			for row in range(0,lat_array.shape[1],20): 
-				gcp=gdal.GCP(lon_array[column][row],lat_array[column][row],0,row*10,column*10)
-				gcp_list.append(gcp)
-	#東経180度西経-180度の線をまたがない場合
-	else:	
-		for column in range(0,lat_array.shape[0],20):
-			for row in range(0,lat_array.shape[1],20): 
-				gcp=gdal.GCP(lon_array[column][row],lat_array[column][row],0,row*10,column*10)
-				gcp_list.append(gcp)
-
-	return gcp_list
 
 if __name__ == '__main__':
 
@@ -144,6 +118,7 @@ if __name__ == '__main__':
 	#型変換とエラー値をnanに変換する
 	Image_var=np.array(Image_var,dtype='uint16')
 	Image_var=np.where(Image_var>Maximum_valid_DN,np.nan,Image_var)
+	Image_var=np.where(Image_var<Minimum_valid_DN,np.nan,Image_var)
 
 	#値を求める
 	Value_arr=Slope*Image_var+Offset
@@ -155,15 +130,8 @@ if __name__ == '__main__':
 	col_size=Image_var.shape[0]
 
 	#GCPのリストをつくる
-	try:
-		#L1の場合
-		lat_arr=gdal.Open(hdf_file.GetSubDatasets()[lat_index][0], gdal.GA_ReadOnly).ReadAsArray()
-		lon_arr=gdal.Open(hdf_file.GetSubDatasets()[lon_index][0], gdal.GA_ReadOnly).ReadAsArray()
-		gcp_list=get_L1_geomesh(lat_arr,lon_arr)
-
-	except:
-		#L2の場合
-		gcp_list=get_L2_geomesh(hdf_filename,lin_size,col_size)
+	#L2の場合
+	gcp_list=get_L2_geomesh(hdf_filename,lin_size,col_size)
 
 	#出力
 	dtype = gdal.GDT_Float32
@@ -172,10 +140,11 @@ if __name__ == '__main__':
 	output.GetRasterBand(1).WriteArray(Value_arr)
 	wkt = output.GetProjection()
 	output.SetGCPs(gcp_list,wkt)
-	#与えたGCPを使ってEPSG4326に投影変換
+	#与えたGCPを使ってESRI53008に投影変換
+#			dstSRS='+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs',\
 	output = gdal.Warp(output_file, \
 			output, \
-			dstSRS='+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs',\
+			dstSRS='ESRI:53008',\
 			srcNodata=np.nan,\
 			dstNodata=np.nan,\
 			tps = True, \
