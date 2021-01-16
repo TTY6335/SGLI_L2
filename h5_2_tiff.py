@@ -72,7 +72,6 @@ if __name__ == '__main__':
 		print('%s IS MISSING.' % input_file)
 		exit(1);
 	
-	hdf_file = gdal.Open(input_file, gdal.GA_ReadOnly)
 	dataset_list=hdf_file.GetSubDatasets()
 
 	print('OPEN %s.' % input_file)
@@ -98,17 +97,25 @@ if __name__ == '__main__':
 		exit(1);
 
 
-	Image_var=gdal.Open(hdf_file.GetSubDatasets()[dataset_index][0], gdal.GA_ReadOnly).ReadAsArray()
+	DN=gdal.Open(hdf_file.GetSubDatasets()[dataset_index][0], gdal.GA_ReadOnly).ReadAsArray()
 
 	#Get Sole, Offset,Minimum_valid_DN, Maximum_valid_DN
 	Metadata=hdf_file.GetMetadata_Dict()
 	hdf_filename=Metadata['Global_attributes_Product_file_name']
 
+	Slope=None
+	Offset=None
+	Mask=None
+	Minimum_valid_DN=None
+	Maximum_valid_DN=None
+	Data_description=None
 	for metadata_lavel in Metadata.keys():
 		if band_name+'_Slope' in metadata_lavel:
 			Slope=float(Metadata[metadata_lavel])
 		if band_name+'_Offset' in metadata_lavel:
 			Offset=float(Metadata[metadata_lavel])
+		if band_name+'_Mask' in metadata_lavel:
+			Mask=float(Metadata[metadata_lavel])
 		if band_name+'_Minimum_valid_DN' in metadata_lavel:
 			Minimum_valid_DN=float(Metadata[metadata_lavel])
 		if band_name+'_Maximum_valid_DN' in metadata_lavel:
@@ -116,18 +123,23 @@ if __name__ == '__main__':
 		if band_name+'_Data_description' in metadata_lavel:
 			Data_description=Metadata[metadata_lavel]
 	#型変換とエラー値をnanに変換する
-	Image_var=np.array(Image_var,dtype='uint16')
-	Image_var=np.where(Image_var>Maximum_valid_DN,np.nan,Image_var)
-	Image_var=np.where(Image_var<Minimum_valid_DN,np.nan,Image_var)
+	DN=np.array(DN,dtype='uint16')
+	if Mask is not None:
+		Mask=np.array(Mask,dtype='uint16')
+		DN=DN & Mask
+	if((Maximum_valid_DN is not None) and (Minimum_valid_DN is not None)):
+		DN=np.where(DN>=Maximum_valid_DN,np.nan,DN)
+		DN=np.where(DN<=Minimum_valid_DN,np.nan,DN)
 
 	#値を求める
-	Value_arr=Slope*Image_var+Offset
+	if((Slope is not None) and (Offset is not None)):
+		Value_arr=Slope*DN+Offset
 	Value_arr=np.array(Value_arr,dtype='float32')
 
 	#列数
-	lin_size=Image_var.shape[1]
+	lin_size=DN.shape[1]
 	#行数
-	col_size=Image_var.shape[0]
+	col_size=DN.shape[0]
 
 	#GCPのリストをつくる
 	#L2の場合
@@ -151,6 +163,8 @@ if __name__ == '__main__':
 			outputType=dtype,\
 			multithread=True,\
 			resampleAlg=gdalconst.GRIORA_NearestNeighbour)
+	#Add Description
+	output.SetMetadata({'Data_description':str(Data_description)})
 	output.FlushCache()
 	output = None 	
 	print('CREATE '+output_file)
