@@ -1,7 +1,7 @@
 # coding:utf-8
 import numpy as np
-import gdal,sys
-import gdalconst
+import sys
+import gdal,gdalconst,osr
 
 __author__ = "TTY6335 https://github.com/TTY6335"
 
@@ -22,37 +22,18 @@ def get_L2_geomesh(filename,lintile,coltile):
 	#横方向の総タイル数
 	htilenum=36
 		
-	#緯度方向(dlin)、経度方向(dcol)
-	#それぞれの1画素の大きさ
-	#d=dlin=dcol
-	d=180.0/lintile/vtilenum
-		
 	#求めたりタイル番号の左上画素の中心の緯度[deg]は、
 	#1タイルあたりの角度が10[deg]であることから、
-	lat0=90.0-vtile*10-d/2
+	lat0=90.0-vtile*10
 
 	#求めたいタイル番号の左上画素の中心の経度[deg]は、
 	#1タイルあたりの角度が10[deg]であることから、
-	lon0=-180.0+htile*10+d/2
+	lon0=-180.0+htile*10
 
-	#gdal_translateに与えるGCPのリスト
-	gcp_list=[]
+	UL_X,UL_Y=6371007.181*np.radians(lon0),6371007.181*np.radians(lat0)
+	resolution=6371007.181*2*np.pi/(htilenum*coltile)
 
-	for lin in range(0,lintile+1,100):
-		lat=lat0-lin*d
-		y=6371007.181*np.radians(lat)
-		r=np.cos(np.radians(lat))
-		for col in range(0,coltile+1,100):
-			if(lin==lintile):
-				lin=lin-1
-			if(col==coltile):
-				col=col-1
-			lon=(lon0+col*d)/r
-			x=6371007.181*r*np.radians(lon)
-			gcp=gdal.GCP(x,y,0,col+0.5,lin+0.5)
-			gcp_list.append(gcp)
-
-	return gcp_list
+	return UL_X,UL_Y,resolution
  
 
 if __name__ == '__main__':
@@ -143,26 +124,20 @@ if __name__ == '__main__':
 
 	#GCPのリストをつくる
 	#L2の場合
-	gcp_list=get_L2_geomesh(hdf_filename,lin_size,col_size)
+	UL_X,UL_Y,ds=get_L2_geomesh(hdf_filename,lin_size,col_size)
 
 	#出力
 	dtype = gdal.GDT_Float32
 	band=1
-	output = gdal.GetDriverByName('GTiff').Create(output_file,lin_size,col_size,band,dtype) 
+	output = gdal.GetDriverByName('GTiff').Create(output_file,lin_size,col_size,band,dtype)
 	output.GetRasterBand(1).WriteArray(Value_arr)
-	wkt = output.GetProjection()
-	output.SetGCPs(gcp_list,wkt)
-	#与えたGCPを使ってESRI53008に投影変換
-#			dstSRS='+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs',\
-	output = gdal.Warp(output_file, \
-			output, \
-			dstSRS='ESRI:53008',\
-			srcNodata=np.nan,\
-			dstNodata=np.nan,\
-			tps = True, \
-			outputType=dtype,\
-			multithread=True,\
-			resampleAlg=gdalconst.GRIORA_NearestNeighbour)
+	output.SetGeoTransform((UL_X, ds, 0, UL_Y, 0,-1*ds))
+	#projection
+	srs = osr.SpatialReference()
+#	srs.ImportFromESRI('PROJCS["Sphere_Sinusoidal",GEOGCS["GCS_Sphere",DATUM["D_Sphere",SPHEROID["Sphere",6371000,0]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Sinusoidal"],PARAMETER["False_Easting",0],PARAMETER["False_Northing",0],PARAMETER["Central_Meridian",0],UNIT["Meter",1]]')
+	srs.ImportFromProj4('+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs')
+	output.SetProjection(srs.ExportToWkt())
+
 	#Add Description
 	output.SetMetadata({'Data_description':str(Data_description)})
 	output.FlushCache()
