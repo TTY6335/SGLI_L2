@@ -95,7 +95,7 @@ if __name__ == '__main__':
 			Slope=float(Metadata[metadata_lavel])
 		if band_name+'_Offset' in metadata_lavel:
 			Offset=float(Metadata[metadata_lavel])
-		if band_name+'_Mask' in metadata_lavel:
+		if (not band_name+'_Mask_for_statistics') and (band_name+'_Mask'in metadata_lavel): 
 			Mask=float(Metadata[metadata_lavel])
 		if band_name+'_Minimum_valid_DN' in metadata_lavel:
 			Minimum_valid_DN=float(Metadata[metadata_lavel])
