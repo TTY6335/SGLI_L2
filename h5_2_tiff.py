@@ -135,7 +135,8 @@ if __name__ == '__main__':
 	#projection
 	srs = osr.SpatialReference()
 #	srs.ImportFromESRI('PROJCS["Sphere_Sinusoidal",GEOGCS["GCS_Sphere",DATUM["D_Sphere",SPHEROID["Sphere",6371000,0]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Sinusoidal"],PARAMETER["False_Easting",0],PARAMETER["False_Northing",0],PARAMETER["Central_Meridian",0],UNIT["Meter",1]]')
-	srs.ImportFromProj4('+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs')
+#	srs.ImportFromProj4('+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs')
+	srs.SetFromUserInput('ESRI:53008')
 	output.SetProjection(srs.ExportToWkt())
 
 	#Add Description
